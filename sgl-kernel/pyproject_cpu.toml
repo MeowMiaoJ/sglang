@@ -34,3 +34,6 @@ cmake.source-dir = "csrc/cpu"
 cmake.build-type = "Release"
 minimum-version = "build-system.requires"
 wheel.packages = ["python/sgl_kernel"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
