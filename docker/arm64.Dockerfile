@@ -28,7 +28,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     source $HOME/.local/bin/env && \
     uv venv --python 3.12
 
-RUN echo -e '[[index]]\nname = "torch"\nurl = "https://download.pytorch.org/whl/cpu"\n\n[[index]]\nname = "torchvision"\nurl = "https://download.pytorch.org/whl/cpu"\n\n[[index]]\nname = "torchaudio"\nurl = "https://download.pytorch.org/whl/cpu"\n\n[[index]]\nname = "triton"\nurl = "https://download.pytorch.org/whl/cpu"' > .venv/uv.toml
+RUN echo -e '[[index]]\nname = "pytorch-cpu"\nurl = "https://download.pytorch.org/whl/cpu"\nexplicit = true' > .venv/uv.toml
 
 ENV UV_CONFIG_FILE=/opt/.venv/uv.toml
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
