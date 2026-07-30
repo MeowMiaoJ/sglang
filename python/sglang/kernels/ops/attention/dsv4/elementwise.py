@@ -15,9 +15,9 @@ from .utils import make_name
 _is_hip = is_hip()
 _is_xpu = is_xpu()
 
-if _is_xpu:
-    import sgl_kernel.fused_k_norm_rope_flashmla as _fused_k_norm_rope_flashmla
-    import sgl_kernel.fused_q_norm_rope as _fused_q_norm_rope
+
+import sgl_kernel.fused_k_norm_rope_flashmla as _fused_k_norm_rope_flashmla
+import sgl_kernel.fused_q_norm_rope as _fused_q_norm_rope
 
 
 @cache_once
