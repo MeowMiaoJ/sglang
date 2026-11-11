@@ -1100,6 +1100,16 @@ def _sample_to_uint8_frames(sample: Any) -> list[Any]:
         # sample is raw tensor
         if sample.dim() == 3:
             sample = sample.unsqueeze(1)
+        if sample.device.type == "xpu":
+            logger.info("[xpu-mem-debug] using chucked mem")
+            # Chunk over frames: a whole-video fp32 temporary is several GB.
+            channels, num_frames, height, width = sample.shape
+            host = np.empty((num_frames, height, width, channels), dtype=np.uint8)
+            for start in range(0, num_frames, 8):
+                chunk = (sample[:, start : start + 8] * 255).clamp_(0, 255)
+                chunk = chunk.to(torch.uint8).permute(1, 2, 3, 0).contiguous()
+                host[start : start + 8] = chunk.cpu().numpy()
+            return list(host)
         sample = (sample * 255).clamp(0, 255).to(torch.uint8)
         videos = sample.permute(1, 2, 3, 0).contiguous()
         if videos.device.type == "cuda":

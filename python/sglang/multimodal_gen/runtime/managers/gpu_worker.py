@@ -922,13 +922,20 @@ class GPUWorker(GPUWorkerPostTrainingMixin):
             and output_batch.output is None
             and not req.return_raw_frames
         ):
-            if self.defer_cache_release:
+            if self.defer_cache_release and not current_platform.is_xpu():
                 # Between back-to-back requests a release only makes the next
                 # one grow the pool back, so wait until the scheduler idles.
                 self._cache_release_due = time.monotonic() + _IDLE_CACHE_RELEASE_S
             elif not deferred:
                 # Deferred finalize keeps the allocator cache: releasing it while
                 # the next request is mid-forward causes cudaFree/cudaMalloc churn.
+                if current_platform.is_xpu():
+                    # XPU keeps cached blocks resident in the driver, so release per request.
+                    from sglang.multimodal_gen.runtime.layers.usp import (
+                        drop_a2a_staging_buffers,
+                    )
+
+                    drop_a2a_staging_buffers()
                 with maybe_record_function("EMPTY_CACHE"):
                     torch.get_device_module().empty_cache()
 

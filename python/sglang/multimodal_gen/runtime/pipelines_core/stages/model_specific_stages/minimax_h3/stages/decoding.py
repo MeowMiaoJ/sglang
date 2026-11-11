@@ -20,6 +20,9 @@ from sglang.multimodal_gen.runtime.managers.memory_managers.component_manager im
     ComponentUse,
 )
 from sglang.multimodal_gen.runtime.models.vaes.fast_path_gate import use_vae_fast_path
+from sglang.multimodal_gen.runtime.models.vaes.minimax_h3_video_vae.klvae import (
+    log_xpu_mem,
+)
 from sglang.multimodal_gen.runtime.pipelines_core.schedule_batch import OutputBatch, Req
 from sglang.multimodal_gen.runtime.pipelines_core.stages.base import (
     StageParallelismType,
@@ -436,9 +439,11 @@ class MiniMaxH3DecodingStage(DecodingStage):
         if self.video_vae is None:
             raise RuntimeError("MiniMax H3 tasks require the video_vae output decoder")
         batch_size = int(visual_latent.shape[0])
+        log_xpu_mem("decode stage start")
         audio_waveform, audio_sample_rate = self._decode_replica_audio(
             audio_latent, server_args
         )
+        log_xpu_mem("after audio decode")
         output_audio_waveform = _canonical_output_audio_waveform(
             audio_waveform, batch_size=batch_size
         )
@@ -455,6 +460,7 @@ class MiniMaxH3DecodingStage(DecodingStage):
             if selected_video_vae is None:
                 raise RuntimeError("video_vae became unavailable during decode")
             self.video_vae = selected_video_vae
+            log_xpu_mem("video_vae ready (weights loaded)")
             if selected_video_vae.training:
                 selected_video_vae.eval()
             visual_arch_config = server_args.pipeline_config.vae_config.arch_config
@@ -505,7 +511,9 @@ class MiniMaxH3DecodingStage(DecodingStage):
                         ),
                         set_forward_context(current_timestep=0, attn_metadata=None),
                     ):
+                        log_xpu_mem("before video decode")
                         decoded = video_decode(visual_decode_latent, **decode_kwargs)
+                        log_xpu_mem("after video decode")
                     if stream is not None:
                         output_file_paths = stream.finish()
                 except BaseException:
@@ -516,7 +524,9 @@ class MiniMaxH3DecodingStage(DecodingStage):
                     # callbacks borrow slices of decoded; only the final output owns it
                     visual_frames = finish_frames(decoded, runtime_owned=True)
                 del decoded
+            log_xpu_mem("video decode finished (before weights released)")
 
+        log_xpu_mem("after video_vae released")
         if visual_frames is not None:
             visual_frames = server_args.pipeline_config.post_decoding(
                 visual_frames, server_args

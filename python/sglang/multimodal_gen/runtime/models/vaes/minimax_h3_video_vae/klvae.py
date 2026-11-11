@@ -30,6 +30,7 @@ from sglang.multimodal_gen.runtime.distributed import (
     model_parallel_is_initialized,
 )
 from sglang.multimodal_gen.runtime.models.vaes.fast_path_gate import VaeFastPathGate
+from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
 
 from .batching import decode_windows, forward_many
 from .processor import (
@@ -41,6 +42,27 @@ from .vae_cnn import EncoderFCN3D
 from .vae_vit import ViT3DDecoder
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+_mem_logger = init_logger(__name__)
+_tiled_decode_calls = 0
+
+
+def log_xpu_mem(tag: str) -> None:
+    if not (hasattr(torch, "xpu") and torch.xpu.is_available()):
+        return
+    if dist.is_initialized() and dist.get_rank() != 0:
+        return
+    free, total = torch.xpu.mem_get_info()
+    reserved = torch.xpu.memory_reserved()
+    _mem_logger.info(
+        "[xpu-mem-debug] vae %s: allocated=%.0fMiB reserved=%.0fMiB "
+        "driver_used=%.0fMiB non_torch=%.0fMiB",
+        tag,
+        torch.xpu.memory_allocated() / 2**20,
+        reserved / 2**20,
+        (total - free) / 2**20,
+        (total - free - reserved) / 2**20,
+    )
+
 
 # The temporal blend write reproduces the eager chain bit for bit, so it runs
 # at every quality level. The gate verifies that against the live eager
@@ -368,9 +390,17 @@ class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         # single equal-shape all-gather; the previous path paid for a barrier,
         # a shape all-gather, and then a padded data all-gather per temporal
         # clip.
+        gather_tag = (
+            f"gather in={stacked.numel() * stacked.element_size() / 2**20:.0f}MiB "
+            f"world={tile_world_size}"
+        )
+        if _tiled_decode_calls <= 3 or _tiled_decode_calls % 10 == 0:
+            log_xpu_mem(f"#{_tiled_decode_calls} before {gather_tag}")
         gathered = get_decode_parallel_group_coordinator().all_gather(
             stacked, separate_tensors=True
         )
+        if _tiled_decode_calls <= 3 or _tiled_decode_calls % 10 == 0:
+            log_xpu_mem(f"#{_tiled_decode_calls} after {gather_tag}")
 
         results = [None] * num_tiles
         for rank, rank_tensors in enumerate(gathered):
@@ -454,6 +484,8 @@ class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         return z
 
     def tiled_decode(self, z):
+        global _tiled_decode_calls
+        _tiled_decode_calls += 1
         if self.parallel_tiling:  # Fast online decoding for large videos
             tile_rank, tile_world_size = get_tile_parallel_state()
         else:
@@ -490,9 +522,17 @@ class AutoencoderKL(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         tile_batch, _ = self._batch_caps()
         if self.training and self.decoder.mask_enabled:
             tile_batch = 1
+        log_this = _tiled_decode_calls <= 3 or _tiled_decode_calls % 10 == 0
+        if log_this:
+            log_xpu_mem(
+                f"#{_tiled_decode_calls} before tiles num_tiles={num_tiles} "
+                f"z={tuple(z.shape)}"
+            )
         decoded_tasks = self._run_tile_tasks(
             z_tiles, local_tile_indices, self.decode, tile_batch=tile_batch
         )
+        if log_this:
+            log_xpu_mem(f"#{_tiled_decode_calls} after tiles")
 
         if tile_world_size > 1:
             all_decoded = self._all_gather_tiled_results(decoded_tasks, num_tiles)
