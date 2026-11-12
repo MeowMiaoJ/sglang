@@ -930,14 +930,15 @@ class GPUWorker(GPUWorkerPostTrainingMixin):
                 # Deferred finalize keeps the allocator cache: releasing it while
                 # the next request is mid-forward causes cudaFree/cudaMalloc churn.
                 if current_platform.is_xpu():
-                    # XPU keeps cached blocks resident in the driver, so release per request.
-                    from sglang.multimodal_gen.runtime.layers.usp import (
-                        drop_a2a_staging_buffers,
+                    from sglang.multimodal_gen.runtime.managers.memory_managers.component_manager import (
+                        _log_xpu_mem,
                     )
 
-                    drop_a2a_staging_buffers()
-                with maybe_record_function("EMPTY_CACHE"):
-                    torch.get_device_module().empty_cache()
+                    # Partial driver reclaim on XPU turns freed blocks into non-torch memory.
+                    _log_xpu_mem("request-end (empty_cache skipped)")
+                else:
+                    with maybe_record_function("EMPTY_CACHE"):
+                        torch.get_device_module().empty_cache()
 
         if req.perf_dump_path is not None or envs.SGLANG_DIFFUSION_STAGE_LOGGING:
             if not req.is_warmup:
