@@ -59,7 +59,7 @@ dependencies = [
   "scipy",
   "sentencepiece==0.2.1",  # 0.2.2 rejects null pieces in InternVL tokenizers.
   "setproctitle",
-  "sglang-kernel-xpu==0.6.0",
+  "sglang-kernel-xpu",
   "smg-grpc-servicer>=0.9.0",
   "soundfile==0.13.1",
   "tiktoken",
@@ -88,7 +88,7 @@ url = "https://docs.sglang.io/whl/xpu/"
 explicit = true
 
 [tool.uv.sources]
-sglang-kernel-xpu = { index = "sglang-xpu" }
+sglang-kernel-xpu = { git = "https://github.com/MeowMiaoJ/sgl-kernel-xpu.git", rev = "patch-xpu" }
 torch = { index = "pytorch-xpu" }
 torchaudio = { index = "pytorch-xpu" }
 torchcodec = { index = "pytorch-xpu" }

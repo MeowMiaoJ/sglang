@@ -9,14 +9,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Define build arguments
 ARG PYTHON_VERSION=3.12
 
-ARG SG_LANG_REPO=https://github.com/sgl-project/sglang.git
-ARG SG_LANG_BRANCH=main
+ARG SG_LANG_REPO=https://github.com/MeowMiaoJ/sglang.git
+ARG SG_LANG_BRANCH=patch-xpu
 
-ARG SG_LANG_KERNEL_REPO=https://github.com/sgl-project/sgl-kernel-xpu.git
+ARG SG_LANG_KERNEL_REPO=https://github.com/MeowMiaoJ/sgl-kernel-xpu.git
 # Branch, tag or commit SHA; only used when SG_LANG_KERNEL_SOURCE=source.
-ARG SG_LANG_KERNEL_BRANCH=main
+ARG SG_LANG_KERNEL_BRANCH=patch-xpu
 # wheel: prebuilt sglang-kernel-xpu pinned in pyproject_xpu.toml; source: build SG_LANG_KERNEL_BRANCH.
-ARG SG_LANG_KERNEL_SOURCE=wheel
+ARG SG_LANG_KERNEL_SOURCE=source
 
 USER root
 
