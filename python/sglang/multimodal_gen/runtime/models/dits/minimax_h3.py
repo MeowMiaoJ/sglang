@@ -476,7 +476,7 @@ def _modulate_scale_shift(
         # Serialized INT8 checkpoints keep the AdaLN tables in FP32.
         if shift.dtype == _BF16_DTYPE:
             return indexed_scale_shift_bf16_(x, shift, scale, indices)
-        if shift.dtype == _FP32_DTYPE:
+        if shift.dtype == _FP32_DTYPE and x.is_cuda:  # PTX asm: no XPU support
             return indexed_scale_shift_fp32_(x, shift, scale, indices)
     return (
         x * (1.0 + scale.index_select(0, indices)) + shift.index_select(0, indices)
@@ -507,7 +507,7 @@ def _modulate_gate(
             if allow_inplace:
                 return indexed_gate_bf16_(x, gate, other, indices)
             return indexed_gate_bf16(x, gate, other, indices)
-        if gate.dtype == _FP32_DTYPE:
+        if gate.dtype == _FP32_DTYPE and x.is_cuda:  # PTX asm: no XPU support
             if allow_inplace:
                 return indexed_gate_fp32_(x, gate, other, indices)
             return indexed_gate_fp32(x, gate, other, indices)
