@@ -1092,24 +1092,36 @@ def _sample_to_uint8_frames(sample: Any) -> list[Any]:
         # sample is raw tensor
         if sample.dim() == 3:
             sample = sample.unsqueeze(1)
-        sample = (sample * 255).clamp(0, 255).to(torch.uint8)
-        videos = sample.permute(1, 2, 3, 0).contiguous()
-        if videos.device.type == "cuda":
+        channels, num_frames, height, width = sample.shape
+        on_cuda = sample.device.type == "cuda"
+        host_videos = None
+        if on_cuda:
             try:
                 host_videos = torch.empty(
-                    videos.shape,
-                    dtype=videos.dtype,
+                    (num_frames, height, width, channels),
+                    dtype=torch.uint8,
                     device="cpu",
                     pin_memory=True,
                 )
             except RuntimeError:
-                videos = videos.cpu().numpy()
-            else:
-                host_videos.copy_(videos, non_blocking=True)
-                torch.cuda.current_stream(videos.device).synchronize()
-                videos = host_videos.numpy()
-        else:
-            videos = videos.cpu().numpy()
+                host_videos = None
+        if host_videos is None:
+            host_videos = torch.empty(
+                (num_frames, height, width, channels), dtype=torch.uint8
+            )
+        # chunking keeps the fp32 temporaries to a few frames instead of the whole video
+        chunk_frames = _conversion_chunk_frames(
+            num_frames, height, width, sample.element_size()
+        )
+        for start in range(0, num_frames, chunk_frames):
+            end = min(start + chunk_frames, num_frames)
+            chunk = (sample[:, start:end] * 255).clamp_(0, 255).to(torch.uint8)
+            chunk = chunk.permute(1, 2, 3, 0).contiguous()
+            host_videos[start:end].copy_(chunk, non_blocking=on_cuda)
+            del chunk
+        if on_cuda:
+            torch.cuda.current_stream(sample.device).synchronize()
+        videos = host_videos.numpy()
         return list(videos)
 
     if not isinstance(sample, np.ndarray):
