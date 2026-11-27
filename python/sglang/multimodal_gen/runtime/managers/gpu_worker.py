@@ -992,7 +992,7 @@ class GPUWorker(GPUWorkerPostTrainingMixin):
                 # the next request is mid-forward causes cudaFree/cudaMalloc churn.
                 if current_platform.is_xpu():
                     # Partial driver reclaim on XPU turns freed blocks into non-torch memory.
-                    logger.info("request-end (empty_cache skipped)")
+                    logger.debug("request-end (empty_cache skipped)")
                 else:
                     with maybe_record_function("EMPTY_CACHE"):
                         torch.get_device_module().empty_cache()
